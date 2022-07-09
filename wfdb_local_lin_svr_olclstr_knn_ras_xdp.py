@@ -204,20 +204,20 @@ for svr_wdw_beg in np.arange(init_delay, init_delay + rem_record_lth - svr_wdw_l
         # Overwrite cwt_wdw[] data w/ more distinct signals:
         xt = np.arange(0, regr_idx)
         cwt_wdw[:, 0] = sps.gausspulse(xt/800.0, fc=10, bw=0.5)   # np.sin(xt*0.12)
-        cwt_wdw[:, 1] = np.sinc(xt/25.0)   # np.sin(xt*1.1)
+        cwt_wdw[:, 1] = -np.sinc(xt/15.0) + 1.0;   # np.sin(xt*1.1)
         cwt_wdw[:, 2] = np.exp(-xt/25.0)   #-np.sin(xt*0.08)
 
         yt = sps.gausspulse(xt, fc=1000, bw=0.5)
 
         rng = np.random.default_rng(seed=42)
-        cwt_wdw[:, 3] = rng.random((regr_idx))*100.01
+        cwt_wdw[:, 3] = rng.random((regr_idx))*1.01
         # cwt_wdw[:, 3] = -np.sin(xt*0.06)
 
         #
         # Target signal: "wellbeing quotient"
         #
         # fetal_lead_wdw = np.sin(xt*0.025)
-        wellbeing_quotient = np.add(cwt_wdw[:,0], cwt_wdw[:,1])
+        wellbeing_quotient = np.add(cwt_wdw[:,1], cwt_wdw[:,2])
 
         init_sect_end = timer()
         # print(" Array collection sect elapsed time:  @  " + str(svr_wdw_beg) + "      "   +  str(init_sect_end - init_sect_beg))
@@ -237,20 +237,38 @@ for svr_wdw_beg in np.arange(init_delay, init_delay + rem_record_lth - svr_wdw_l
             #
             #
             # nusv_res = NuSVR(nu=0.95, C=10.0, kernel='linear', degree=3, gamma='scale', coef0=0.0, shrinking=True, tol=0.001, cache_size=200, verbose=False, max_iter=10000)
-            nusv_res = NuSVR(nu=0.5, C=1.0, kernel='linear', degree=2, gamma='scale', coef0=0.0, shrinking=True, tol=0.001, cache_size=200, verbose=False, max_iter=-1)
-            z_rbf = nusv_res.fit(cwt_wdw, wellbeing_quotient).predict(cwt_wdw)
+#
+#
+#            nusv_res = NuSVR(nu=0.5, C=1.0, kernel='linear', degree=2, gamma='scale', coef0=0.0, shrinking=True, tol=0.001, cache_size=200, verbose=False, max_iter=-1)
+#            z_rbf = nusv_res.fit(cwt_wdw, wellbeing_quotient).predict(cwt_wdw)
 
+            #
+            # Linear Support vector regression:
+            #   Feature vector window + wellbeing quotient target -> regression coefficients & intercept
+            #   Compute the wellbeing quotient interpolation / prediction
+            #
+            nusv_res = NuSVR(nu=0.5, C=1.0, kernel='linear', shrinking=True, tol=0.001, cache_size=200, verbose=False, max_iter=-1)
+            wq_interp = nusv_res.fit(cwt_wdw, wellbeing_quotient).predict(cwt_wdw)
+
+            # Store regression coef's & offset:
+            nusv_lin_coef = np.float32(nusv_res.coef_)
+            nusv_intercept = np.float32(nusv_res.intercept_)
 
             # Show inputs, target, and synthesized target from inputs:
             #
             x = np.arange(len(fetal_lead_wdw))
-            fig = make_subplots(rows=6, cols=1, subplot_titles=("CWT 1", "CWT 2", "CWT 3", "CWT 4", "Target", "Predicted"))
+            # fig = make_subplots(rows=6, cols=2,
+
+            #                     subplot_titles=("CWT 1", "CWT 2", "CWT 3", "CWT 4", "Target", "Predicted"),
+            #                     column_widths=[0.5, 0.5, 0.5, 0.5, 0.5, 0.5])
+            fig = make_subplots(rows=5, cols=2, column_widths=[0.75, 0.75])
+
             fig.append_trace(go.Scatter(x=x, y=cwt_wdw[:, 0]), row=1, col=1)
             fig.append_trace(go.Scatter(x=x, y=cwt_wdw[:, 1]), row=2, col=1)
             fig.append_trace(go.Scatter(x=x, y=cwt_wdw[:, 2]), row=3, col=1)
-            fig.append_trace(go.Scatter(x=x, y=cwt_wdw[:, 3]), row=4, col=1)
-            fig.append_trace(go.Scatter(x=x, y=wellbeing_quotient), row=5, col=1)
-            fig.append_trace(go.Scatter(x=x, y=z_rbf), row=6, col=1)
+            # fig.append_trace(go.Scatter(x=x, y=cwt_wdw[:, 3]), row=4, col=1)
+            fig.append_trace(go.Scatter(x=x, y=wellbeing_quotient), row=4, col=1)
+            fig.append_trace(go.Scatter(x=x, y=wq_interp), row=5, col=1)
             fig.show()
 
             # Store regression coef's & offset:
