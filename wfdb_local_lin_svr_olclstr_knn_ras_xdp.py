@@ -203,10 +203,10 @@ for svr_wdw_beg in np.arange(init_delay, init_delay + rem_record_lth - svr_wdw_l
 
         # Overwrite cwt_wdw[] data w/ more distinct signals:
         xt = np.arange(0, regr_idx)
-        cwt_wdw[:, 1] = sps.gausspulse(xt/800.0, fc=10, bw=0.5)   # np.sin(xt*0.12)
-        cwt_wdw[:, 0] = -np.sinc(xt/15.0) + 1.0;   # np.sin(xt*1.1)
-        cwt_wdw[:, 3] = np.exp(-xt/25.0)   #-np.sin(xt*0.08)
-        cwt_wdw[:, 2] = sps.gaussian(regr_idx, regr_idx/6.0)
+        cwt_wdw[:, 0] = sps.gausspulse(xt/800.0, fc=10, bw=0.5)   # np.sin(xt*0.12)
+        cwt_wdw[:, 1] = -np.sinc(xt/15.0) + 1.0;   # np.sin(xt*1.1)
+        cwt_wdw[:, 2] = np.exp(-xt/25.0)   #-np.sin(xt*0.08)
+        cwt_wdw[:, 3] = sps.gaussian(regr_idx, regr_idx/6.0)
 
         yt = sps.gausspulse(xt, fc=1000, bw=0.5)
 
@@ -218,7 +218,7 @@ for svr_wdw_beg in np.arange(init_delay, init_delay + rem_record_lth - svr_wdw_l
         # Target signal: "wellbeing quotient"
         #
         # fetal_lead_wdw = np.sin(xt*0.025)
-        wellbeing_quotient = np.add(cwt_wdw[:,1]*0.5, cwt_wdw[:,2])
+        wellbeing_quotient = np.multiply(cwt_wdw[:,1], cwt_wdw[:,2])
 
         init_sect_end = timer()
         # print(" Array collection sect elapsed time:  @  " + str(svr_wdw_beg) + "      "   +  str(init_sect_end - init_sect_beg))
@@ -321,6 +321,93 @@ for svr_wdw_beg in np.arange(init_delay, init_delay + rem_record_lth - svr_wdw_l
             plt.show()
 
             #
+            # Multiplicative interaction to show RBF SVR functionality in modeling non-linear interactions:
+            #
+            #
+
+            wellbeing_quotient = np.multiply(cwt_wdw[:, 1], cwt_wdw[:, 2])
+
+            #
+            # Linear Support vector regression:
+            #   Feature vector window + wellbeing quotient target -> regression coefficients & intercept
+            #   Compute the wellbeing quotient interpolation / prediction
+            #
+            nusv_res = NuSVR(nu=0.5, C=1.0, kernel='linear', shrinking=True, tol=0.001, cache_size=200, verbose=False, max_iter=-1)
+            wq_interp = nusv_res.fit(cwt_wdw, wellbeing_quotient).predict(cwt_wdw)
+
+            # Store regression coef's & offset:
+            nusv_lin_coef = np.float32(nusv_res.coef_)
+            nusv_intercept = np.float32(nusv_res.intercept_)
+
+            # Show active and inactive components, wellbeing quotient, and predicted wellbeing quotient
+            #
+            fig, axs = plt.subplots(nrows=4, ncols=2, figsize=(7, 7))
+
+            axs[0, 0].set_title("Active Component: Gaussian Windowed Sinusoid")
+            axs[0, 0].plot(x, cwt_wdw[:, 1], color='C0')
+            # axs[0, 0].set_xlabel("Time")
+            # axs[0, 0].set_ylabel("Amplitude")
+
+            axs[1, 0].set_title("Active Component: Gaussian Pulse")
+            axs[1, 0].plot(x, cwt_wdw[:, 2], color='C1')
+
+            axs[0, 1].set_title("Inactive Component: Inverted Sinc + Offset")
+            axs[0, 1].plot(x, cwt_wdw[:, 0], color='C2')
+
+            axs[1, 1].set_title("Inactive Component: Exponential")
+            axs[1, 1].plot(x, cwt_wdw[:, 3], color='C3')
+
+            axs[2, 0].set_title("Wellbeing Quotient")
+            axs[2, 0].plot(x, wellbeing_quotient, color='C4')
+
+            axs[3, 0].set_title("SVR Prediction / Interpolation")
+            axs[3, 0].plot(x, wq_interp, color='C5')
+
+            axs[2, 1].remove()  # don't display empty ax
+            axs[3, 1].remove()  # don't display empty ax
+
+            fig.tight_layout()
+            plt.show()
+
+            #
+            # Non-Linear Support vector regression:
+            #   Feature vector window + wellbeing quotient target -> regression coefficients & intercept
+            #   Compute the wellbeing quotient interpolation / prediction
+            #
+            nusv_res = NuSVR(nu=0.5, C=1.0, kernel='rbf', shrinking=True, tol=0.001, cache_size=200, verbose=False, max_iter=-1)
+            wq_interp = nusv_res.fit(cwt_wdw, wellbeing_quotient).predict(cwt_wdw)
+
+            # Show active and inactive components, wellbeing quotient, and predicted wellbeing quotient
+            #
+            fig, axs = plt.subplots(nrows=4, ncols=2, figsize=(7, 7))
+
+            axs[0, 0].set_title("Active Component: Gaussian Windowed Sinusoid")
+            axs[0, 0].plot(x, cwt_wdw[:, 1], color='C0')
+            # axs[0, 0].set_xlabel("Time")
+            # axs[0, 0].set_ylabel("Amplitude")
+
+            axs[1, 0].set_title("Active Component: Gaussian Pulse")
+            axs[1, 0].plot(x, cwt_wdw[:, 2], color='C1')
+
+            axs[0, 1].set_title("Inactive Component: Inverted Sinc + Offset")
+            axs[0, 1].plot(x, cwt_wdw[:, 0], color='C2')
+
+            axs[1, 1].set_title("Inactive Component: Exponential")
+            axs[1, 1].plot(x, cwt_wdw[:, 3], color='C3')
+
+            axs[2, 0].set_title("Wellbeing Quotient")
+            axs[2, 0].plot(x, wellbeing_quotient, color='C4')
+
+            axs[3, 0].set_title("SVR Prediction / Interpolation")
+            axs[3, 0].plot(x, wq_interp, color='C5')
+
+            axs[2, 1].remove()  # don't display empty ax
+            axs[3, 1].remove()  # don't display empty ax
+
+            fig.tight_layout()
+            plt.show()
+
+            #
             # Small mod's (diffeomorphisms) to inputs to observe hopefully correspondingly small changes in SVR evaluation outputs:
             #
             #
@@ -328,10 +415,10 @@ for svr_wdw_beg in np.arange(init_delay, init_delay + rem_record_lth - svr_wdw_l
             # Small mods to wellbeing component hypothesis signals:
             xt = np.arange(0, regr_idx)
             cwt_wdwx = cwt_wdw  # Just reuse for size
-            cwt_wdwx[:, 1] = sps.gausspulse(xt / 200.0, fc=10, bw=0.5)  # np.sin(xt*0.12)
-            cwt_wdwx[:, 0] = -np.sinc(xt / 15.0) + 1.0;  # np.sin(xt*1.1)
-            cwt_wdwx[:, 3] = np.exp(-xt / 25.0)  # -np.sin(xt*0.08)
-            cwt_wdwx[:, 2] = sps.gaussian(regr_idx, regr_idx / 6.0)
+            cwt_wdwx[:, 0] = sps.gausspulse(xt / 200.0, fc=10, bw=0.5)  # np.sin(xt*0.12)
+            cwt_wdwx[:, 1] = -np.sinc(xt / 15.0) + 1.0;  # np.sin(xt*1.1)
+            cwt_wdwx[:, 2] = np.exp(-xt / 25.0)  # -np.sin(xt*0.08)
+            cwt_wdwx[:, 3] = sps.gaussian(regr_idx, regr_idx / 6.0)
 
             # Prediction of wellbeing coefficient using input signal diffeomorphisms
             wq_interpx = nusv_res.fit(cwt_wdwx, wellbeing_quotient).predict(cwt_wdw)
